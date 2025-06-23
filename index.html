@@ -22,7 +22,7 @@
 <body>
 
 <video id="remoteVideo"  autoplay controls></video>
-
+<button id="connect">connect</button>
 <script>
 document.getElementById('remoteVideo').setAttribute('playsinline', '');
       let gt;
@@ -91,7 +91,12 @@ async function getPeerId() {
   }
 }
 getPeerId().catch(console.error);
-
+document.getElementById('connect').addEventListener('click', () => {
+  
+    console.log('Connecting to PeerJS server...');
+    getPeerId().catch(console.error);
+  
+});
 //conn = peer.connect('');
 //conn.send('ok');
 
