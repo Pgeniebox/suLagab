@@ -38,18 +38,8 @@ peer.on('open', function(id) {
     
 });
 
-peer.on('connection', function(conn) {
-  console.log('New client connected:', conn.peer);
 
-  conn?.on('data', function(data) {
-    console.log('Received:', data);
-  });
 
-  conn?.on('close', function() {
-    console.log('Client disconnected:', conn.peer);
-  });
-});
-let stream;
 peer.on('call', call => {
     console.log('Incoming call from:', call);
     call.answer();
@@ -89,13 +79,19 @@ async function getId() {
   return content.trim();
 }
 
-const id =  getId().then(id => {
-  console.log('Peer ID from GitHub:', id);
-  peer.connect(id);
+let id =  getId();
+async function getPeerId() {
+  try {
+     id = await getId();
+     console.log('Peer ID from GitHub:', id);
+     peer.connect(id);
+  } catch (error) {
+    console.error('Error fetching peer ID:', error);
+    throw error;
+  }
+}
+getPeerId().catch(console.error);
 
-}).catch(error => {
-  console.error('Error fetching peer ID:', error);
-});
 //conn = peer.connect('');
 //conn.send('ok');
 
