@@ -14,93 +14,76 @@
         padding: 1rem;
         text-align: center;
     }
-    video {
+    canvas {
         width: 100%;
         height: 100%;
     }
 </style>
 <body>
 
-<video id="remoteVideo"  autoplay controls></video>
+<canvas id="remoteVideo"  ></canvas>
 <button id="connect">connect</button>
 <script>
-document.getElementById('remoteVideo').setAttribute('playsinline', '');
-      let gt;
-gt =  prompt('Enter your GitHub personal access token:');
-if (!gt) {
-    location.reload();
-}
-    let peer;
- peer = new Peer(); 
-
-peer.on('open', function(id) {
-  console.log('Connected to PeerJS server with ID:', id);
+    const canvas = document.getElementById('remoteVideo')
+    const ctx = canvas.getContext('2d')
+    canvas.width = 640
+    canvas.height = 360
     
-});
-
-
-
-peer.on('call', call => {
-    console.log('Incoming call from:', call);
-    call.answer();
-    call.on('error', err => console.error('call error:', err))
-    call.on('stream', remoteStream => {
-    console.log('Remote stream received:', remoteStream);
-    document.getElementById('remoteVideo').srcObject = remoteStream;
-   
-
-});
-
-
-
-})
-const owner = 'pgeniebox';
-const repo = 'cameraLagab';
-const filePath = 'peer.json';
-const token = gt; // your personal access token
-const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
-
-async function getId() {
-  let response = await fetch(apiUrl, {
-    headers: { Authorization: `token ${token}` }
-  });
-
-  if (!response.ok) {
-    location.reload();
-  }
-
-  // Parse the JSON that GitHub returns
-  let fileData = await response.json();
-
-  // Decode the base64-encoded content
-  let content = atob(fileData.content); 
-
-  // Trim any newlines GitHub might add
-  return content.trim();
-}
-
-let id =  getId();
-async function getPeerId() {
-  try {
-     id = await getId();
-     console.log('Peer ID from GitHub:', id);
-     peer.connect(id);
-  } catch (error) {
-    console.error('Error fetching peer ID:', error);
-    throw error;
-  }
-}
-getPeerId().catch(console.error);
-document.getElementById('connect').addEventListener('click', () => {
-  
-    console.log('Connecting to PeerJS server...');
-    getPeerId().catch(console.error);
-  
-});
-//conn = peer.connect('');
-//conn.send('ok');
-
-</script>
+    let gt = prompt('Enter your GitHub personal access token:')
+    if (!gt) location.reload()
+    
+    const peer = new Peer()
+    
+    peer.on('open', id => console.log('PeerJS ID:', id))
+    
+    // Fetch sender's Peer ID
+    const owner = 'pgeniebox'
+    const repo = 'cameraLagab'
+    const filePath = 'peer.json'
+    const token = gt
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`
+    
+    async function getPeerId() {
+      const response = await fetch(apiUrl, { headers: { Authorization: `token ${token}` } })
+      if (!response.ok) throw new Error('Error fetching file')
+      const fileData = await response.json()
+      return atob(fileData.content).trim()
+    }
+    
+    // Connect and listen for data
+    let conn
+    getPeerId().then(id => {
+      conn = peer.connect(id)
+      conn.on('open', () => console.log('Connected to sender'))
+      conn.on('data', async data => {
+         try{
+        const blob = new Blob([data], { type: 'image/jpeg' })
+    const img = await createImageBitmap(blob)
+    requestAnimationFrame(()=>{ctx.drawImage(img, 0, 0, canvas.width, canvas.height)})}catch(e){
+        console.error('Error processing image data:', e)    
+    }
+        
+      })
+    }).catch(console.error)
+    
+    // Optional reconnect
+    document.getElementById('connect').addEventListener('click', () => {
+      if (!conn || conn.open === false) {
+        getPeerId().then(id => {
+          conn = peer.connect(id)
+          conn.on('open', () => console.log('Connected to sender'))
+          conn.on('data', async data => {
+            if (data instanceof ArrayBuffer) {
+              const blob = new Blob([data], { type: 'image/jpeg' })
+              const bitmap = await createImageBitmap(blob)
+              ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+            }
+          })
+        })
+      }
+    })
+    </script>
+    
 
 </body>
 </html>
