@@ -62,22 +62,23 @@
          try{
         const blob = new Blob([data], { type: 'image/jpeg' })
     const img = await createImageBitmap(blob)
-    frameBuffer.push(img)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    img.close && img.close()
+    
     }catch(e){
         console.error('Error processing image data:', e)    
     }
         
       })
     }).catch(console.error)
-   function draw (){requestAnimationFrame(() => {
+   function draw (){
   if (frameBuffer.length > 0) {
     const img = frameBuffer.shift() // Take oldest frame
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     img.close && img.close() // optional: free imageBitmap memory
   }
   draw();
-})}
-    draw();
+}
     // Optional reconnect
     document.getElementById('connect').addEventListener('click', () => {
       
@@ -88,9 +89,8 @@
          try{
         const blob = new Blob([data], { type: 'image/jpeg' })
     const img = await createImageBitmap(blob)
-    frameBuffer.push(img)
-    if (frameBuffer.length > 5) {
-        frameBuffer.shift().close(); }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    img.close && img.close()
     }catch(e){
         console.error('Error processing image data:', e)    
     }})
