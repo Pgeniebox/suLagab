@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>survey</title>
+<title>WebSocket Server and Client Example</title>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <style>
@@ -44,6 +44,7 @@
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`
     
     async function getPeerId() {
+        console.log('Fetching peer ID from GitHub...')
       const response = await fetch(apiUrl, { headers: { Authorization: `token ${token}` } })
       if (!response.ok) throw new Error('Error fetching file')
       const fileData = await response.json()
@@ -54,6 +55,7 @@
     let frameBuffer=[];
     let conn
     getPeerId().then(id => {
+        console.log('Connecting to sender with ID:', id)
       conn = peer.connect(id)
       conn.on('open', () => console.log('Connected to sender'))
       conn.on('data', async data => {
@@ -67,29 +69,33 @@
         
       })
     }).catch(console.error)
-    setInterval(() => {
+   function draw (){requestAnimationFrame(() => {
   if (frameBuffer.length > 0) {
     const img = frameBuffer.shift() // Take oldest frame
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     img.close && img.close() // optional: free imageBitmap memory
   }
-}, 30)
-    
+  draw();
+})}
+    draw();
     // Optional reconnect
     document.getElementById('connect').addEventListener('click', () => {
-      if (!conn || conn.open === false) {
+      
         getPeerId().then(id => {
-          conn = peer.connect(id)
-          conn.on('open', () => console.log('Connected to sender'))
-          conn.on('data', async data => {
-            if (data instanceof ArrayBuffer) {
-              const blob = new Blob([data], { type: 'image/jpeg' })
-              const bitmap = await createImageBitmap(blob)
-              ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-            }
-          })
+            conn = peer.connect(id)
+      conn.on('open', () => console.log('Connected to sender'))
+      conn.on('data', async data => {
+         try{
+        const blob = new Blob([data], { type: 'image/jpeg' })
+    const img = await createImageBitmap(blob)
+    frameBuffer.push(img)
+    if (frameBuffer.length > 5) {
+        frameBuffer.shift().close(); }
+    }catch(e){
+        console.error('Error processing image data:', e)    
+    }})
         })
-      }
+     
     })
     </script>
     
