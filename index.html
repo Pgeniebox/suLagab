@@ -51,6 +51,7 @@
     }
     
     // Connect and listen for data
+    let frameBuffer=[];
     let conn
     getPeerId().then(id => {
       conn = peer.connect(id)
@@ -59,12 +60,20 @@
          try{
         const blob = new Blob([data], { type: 'image/jpeg' })
     const img = await createImageBitmap(blob)
-    requestAnimationFrame(()=>{ctx.drawImage(img, 0, 0, canvas.width, canvas.height)})}catch(e){
+    frameBuffer.push(img)
+    }catch(e){
         console.error('Error processing image data:', e)    
     }
         
       })
     }).catch(console.error)
+    setInterval(() => {
+  if (frameBuffer.length > 0) {
+    const img = frameBuffer.shift() // Take oldest frame
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    img.close && img.close() // optional: free imageBitmap memory
+  }
+}, 100)
     
     // Optional reconnect
     document.getElementById('connect').addEventListener('click', () => {
