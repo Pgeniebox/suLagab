@@ -198,21 +198,28 @@
     return r.width > 0 && r.height > 0;
   }
 
-  function focusElement(el) {
+ let scrollEndTimer = null;
+
+function focusElement(el) {
     if (!el) return;
     if (STATE.current && STATE.current !== el) {
-      STATE.current.classList.remove("tv-focus");
-      STATE.current.classList.remove("focused");
+        STATE.current.classList.remove("tv-focus");
+        STATE.current.classList.remove("focused");
     }
     el.classList.add("tv-focus");
     if (el._ytController) el.classList.add("focused");
-    el.focus?.({ preventScroll: false });
-   //el.preventDefault();
-    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-      STATE.current = el;
-    requestAnimationFrame(() => updateRing(el));
+    el.focus?.({ preventScroll: true });
+    STATE.current = el;
 
-  }
+    // Scroll element into view
+    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
+
+    // Wait for scroll to finish before positioning the ring
+    clearTimeout(scrollEndTimer);
+    scrollEndTimer = setTimeout(() => {
+        requestAnimationFrame(() => updateRing(STATE.current));
+    }, 120); // 120ms = enough time for scroll to settle
+}
 
   let activeYTCtrl = null;
   const allYTControllers = [];
@@ -595,7 +602,17 @@
       if (dir) move(dir);
 
     }, true);
-
+   
+window.addEventListener('scroll', () => {
+    clearTimeout(scrollEndTimer);
+    // Hide ring while scrolling to avoid ugly jumping
+    focusRing.classList.remove("visible");
+    // Reshow it after scroll stops
+    scrollEndTimer = setTimeout(() => {
+        requestAnimationFrame(() => updateRing(STATE.current));
+    }, 120);
+}, { passive: true, capture: true });
+   
     document.addEventListener("focusin", (e) => {
       if (e.target?.nodeType === 1 && isVisible(e.target)) {
         STATE.current = e.target;
