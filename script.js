@@ -2,7 +2,6 @@
 
 (function () {
 
-  // ── Page cleanup ──────────────────────────────────────────────────────────
   document.querySelector("header")?.remove();
   document.querySelector(".download-app-section")?.remove();
   document.querySelector("footer")?.remove();
@@ -15,7 +14,6 @@
   document.body.style.setProperty('padding-top', '50px', 'important');
   document.body.style.setProperty('padding-bottom', '50px', 'important');
 
-  // ── Ad removal ────────────────────────────────────────────────────────────
   const adObserver = new MutationObserver((mutations) => {
     for (const m of mutations)
       for (const node of m.addedNodes)
@@ -23,7 +21,6 @@
   });
   adObserver.observe(document.body, { childList: true, subtree: true });
 
-  // ── Styles ────────────────────────────────────────────────────────────────
   const style = document.createElement("style");
   style.textContent = `
     *::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
@@ -173,7 +170,6 @@
   `;
   document.head.appendChild(style);
 
-  // ── Focus ring ────────────────────────────────────────────────────────────
   const focusRing = document.createElement("div");
   focusRing.id = "tv-focus-ring";
   document.body.appendChild(focusRing);
@@ -195,16 +191,13 @@
     focusRing.classList.add("visible");
   }
 
-  // ── Shared navigation state ───────────────────────────────────────────────
   const STATE = { current: null };
 
   function isVisible(el) {
     if (!el || el.nodeType !== 1 || !el.isConnected) return false;
     const s = getComputedStyle(el);
     if (s.display === "none" || s.visibility === "hidden" || s.opacity === "0") return false;
-    // Note: we intentionally do NOT filter on pointerEvents so YouTube overlays
-    // (which may have pointer-events adjustments) still appear in the nav list.
-    const r = el.getBoundingClientRect();
+     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   }
 
@@ -212,11 +205,9 @@
     if (!el) return;
     if (STATE.current && STATE.current !== el) {
       STATE.current.classList.remove("tv-focus");
-      // Remove focused class from YouTube overlays too
       STATE.current.classList.remove("focused");
     }
     el.classList.add("tv-focus");
-    // Add focused class so YouTube enter-hint appears
     if (el._ytController) el.classList.add("focused");
     el.focus?.({ preventScroll: true });
     el.scrollIntoView({ block: "center", inline: "center" });
@@ -224,7 +215,6 @@
     requestAnimationFrame(() => updateRing(el));
   }
 
-  // ── YouTube TV Controller ─────────────────────────────────────────────────
   let activeYTCtrl = null;
   const allYTControllers = [];
 
@@ -251,15 +241,14 @@
       this._msgHandler = null;
 
       this._upgradeIframe();
-      this._buildOverlay();      // overlay on body — iframe DOM is UNTOUCHED
+      this._buildOverlay();      
       this._listenMessages();
       this._syncPosition();
 
       allYTControllers.push(this);
     }
 
-    // Add enablejsapi=1 so postMessage commands work.
-    // The iframe stays exactly where it is in the DOM — we never move or wrap it.
+   
     _upgradeIframe() {
       try {
         const src = new URL(this.iframe.src, location.href);
@@ -269,24 +258,20 @@
           this.iframe.src = src.toString();
         }
       } catch(e) {}
-      // Exclude the raw iframe from TV nav — the overlay handles navigation
       this.iframe.setAttribute('tabindex', '-1');
     }
 
-    // Build the overlay as a fixed-position div on <body>.
-    // It floats above the iframe, sized and positioned via getBoundingClientRect.
+  
     _buildOverlay() {
       this.overlay = document.createElement('div');
       this.overlay.className = 'yt-tv-overlay';
       this.overlay.setAttribute('tabindex', '0');
       this.overlay._ytController = this;
 
-      // "Press ENTER" hint
       const hint = document.createElement('div');
       hint.className   = 'yt-tv-enter-hint';
       hint.textContent = '▶  Press ENTER to control';
 
-      // HUD bar
       this.hud = document.createElement('div');
       this.hud.className = 'yt-tv-hud';
       this.hud.innerHTML = `
@@ -309,7 +294,6 @@
         </div>
       `;
 
-      // Flash feedback
       this.flash = document.createElement('div');
       this.flash.className = 'yt-tv-flash';
 
@@ -317,14 +301,11 @@
       this.overlay.appendChild(this.hud);
       this.overlay.appendChild(this.flash);
 
-      // Appended to body — completely outside the iframe's DOM tree
       document.body.appendChild(this.overlay);
     }
 
-    // Keep the fixed overlay positioned directly over the iframe.
     _syncPosition() {
       const rect = this.iframe.getBoundingClientRect();
-      // If iframe isn't rendered yet, skip
       if (rect.width === 0 || rect.height === 0) return;
       this.overlay.style.left   = `${rect.left}px`;
       this.overlay.style.top    = `${rect.top}px`;
@@ -395,7 +376,6 @@
       this.isActive = false;
       this.overlay.classList.remove('player-active');
       if (activeYTCtrl === this) activeYTCtrl = null;
-      // Return focus to the overlay so the user can navigate away normally
       focusElement(this.overlay);
     }
 
@@ -433,10 +413,8 @@
     }
   }
 
-  // Re-sync all overlays on scroll or resize (overlays are fixed, iframes scroll)
   function syncAllOverlays() {
     for (const ctrl of allYTControllers) ctrl._syncPosition();
-    // Also keep focus ring in sync if current element is a YouTube overlay
     if (STATE.current?._ytController) updateRing(STATE.current);
   }
   window.addEventListener('scroll', syncAllOverlays, { passive: true, capture: true });
@@ -453,11 +431,9 @@
   }
 
   setupYouTubeIframes();
-  // Pick up iframes added later by the page
   const ytObserver = new MutationObserver(setupYouTubeIframes);
   ytObserver.observe(document.body, { childList: true, subtree: true });
 
-  // ── TV Navigation ─────────────────────────────────────────────────────────
   (() => {
     const SELECTOR = `
       a[href],
@@ -592,23 +568,19 @@
       if (next) focusElement(next);
     }
 
-    // ── Keyboard handler ───────────────────────────────────────────────────
     document.addEventListener("keydown", (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
 
-      // YouTube player mode: all keys go to the active controller
       if (activeYTCtrl) {
         if (e.key === 'Escape') activeYTCtrl.deactivate();
         else                    activeYTCtrl.handleKey(e.key);
         return;
       }
 
-      // Enter key
       if (e.key === 'Enter') {
         const cur = STATE.current;
         if (cur?._ytController) {
-          // Focused element is a YouTube overlay → enter player mode
           cur._ytController.activate();
         } else {
           cur?.click();
@@ -616,7 +588,6 @@
         return;
       }
 
-      // Arrow keys: navigate
       const map = {
         ArrowRight: "right", ArrowLeft: "left",
         ArrowUp: "up",       ArrowDown: "down"
@@ -638,5 +609,9 @@
 
     window.tvNav = { getFocusables, move, syncCurrent, state: STATE };
   })();
+setTimeout(()=>{
+let dark= document.querySelector("#dark_theme");
+if(!dark.checked){ dark.click();}
 
+},5000)
 })();
