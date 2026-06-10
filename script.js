@@ -207,7 +207,7 @@
     el.classList.add("tv-focus");
     if (el._ytController) el.classList.add("focused");
     el.focus?.({ preventScroll: true });
-//el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
       STATE.current = el;
     requestAnimationFrame(() => updateRing(el));
   }
