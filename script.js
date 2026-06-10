@@ -441,7 +441,6 @@ function showBlurOverlay(Text) {
     if (next) focusElement(next);
   }
 
-  // --- Listeners & Init ---
   setupYouTubeIframes();
   new MutationObserver(setupYouTubeIframes).observe(document.body, { childList: true, subtree: true });
   let stop = false;
