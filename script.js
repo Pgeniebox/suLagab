@@ -1,5 +1,8 @@
+
+
 (function () {
 
+  // ── Page cleanup ──────────────────────────────────────────────────────────
   document.querySelector("header")?.remove();
   document.querySelector(".download-app-section")?.remove();
   document.querySelector("footer")?.remove();
@@ -12,34 +15,40 @@
   document.body.style.setProperty('padding-top', '50px', 'important');
   document.body.style.setProperty('padding-bottom', '50px', 'important');
 
+  // ── Ad removal ────────────────────────────────────────────────────────────
   const adObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      for (const node of m.addedNodes) {
-        if (node.classList?.contains("google-auto-placed")) { node.remove(); }
-      }
-    }
+    for (const m of mutations)
+      for (const node of m.addedNodes)
+        if (node.classList?.contains("google-auto-placed")) node.remove();
   });
   adObserver.observe(document.body, { childList: true, subtree: true });
 
+  // ── Styles ────────────────────────────────────────────────────────────────
   const style = document.createElement("style");
   style.textContent = `
     *::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
     *:focus { outline: none; }
     .tv-focus { position: relative; z-index: 20; }
 
+    /* Steam-like navigation ring — lives on body, never clipped */
     #tv-focus-ring {
       position: fixed;
       pointer-events: none;
       z-index: 2147483647;
       box-sizing: border-box;
-      border: 3px solid rgba(255,255,255,0.88);
+      border: 2px solid rgba(255,255,255,0.88);
       box-shadow:
         0 0 0 3px  rgba(30,140,255,0.85),
         0 0 14px 4px rgba(30,140,255,0.55),
         0 0 40px 10px rgba(30,140,255,0.25);
       opacity: 0;
-      /* No position transition — causes lag on TV. Only animate opacity and glow */
-      transition: opacity .15s ease, border-radius .1s ease;
+      transition:
+        left   .14s cubic-bezier(.25,.46,.45,.94),
+        top    .14s cubic-bezier(.25,.46,.45,.94),
+        width  .14s cubic-bezier(.25,.46,.45,.94),
+        height .14s cubic-bezier(.25,.46,.45,.94),
+        border-radius .14s ease,
+        opacity .12s ease;
       animation: tvRingPulse 2s infinite ease-in-out;
     }
     #tv-focus-ring.visible { opacity: 1; }
@@ -60,8 +69,9 @@
       }
     }
 
+    /* ── YouTube TV overlay — fixed on body, synced to the iframe position ── */
     .yt-tv-overlay {
-      position: absolute;
+      position: fixed;
       z-index: 9999;
       box-sizing: border-box;
       outline: none;
@@ -69,6 +79,7 @@
       cursor: pointer;
     }
 
+    /* "Press ENTER" hint — visible when overlay is focused, not in player mode */
     .yt-tv-enter-hint {
       position: absolute;
       bottom: 14px;
@@ -84,9 +95,10 @@
       opacity: 0;
       transition: opacity .2s;
     }
-    .yt-tv-overlay.focused .yt-tv-enter-hint      { opacity: 1; }
+    .yt-tv-overlay.focused .yt-tv-enter-hint     { opacity: 1; }
     .yt-tv-overlay.player-active .yt-tv-enter-hint { opacity: 0 !important; }
 
+    /* HUD bar at the bottom of the video */
     .yt-tv-hud {
       position: absolute;
       bottom: 0; left: 0; right: 0;
@@ -142,6 +154,7 @@
     }
     .yt-tv-hints span { white-space: nowrap; }
 
+    /* Flash feedback (seek / volume) */
     .yt-tv-flash {
       position: absolute;
       top: 50%; left: 50%;
@@ -160,15 +173,16 @@
   `;
   document.head.appendChild(style);
 
+  // ── Focus ring ────────────────────────────────────────────────────────────
   const focusRing = document.createElement("div");
   focusRing.id = "tv-focus-ring";
   document.body.appendChild(focusRing);
-  const RING_PAD = 6;
+  const RING_PAD = 5;
 
   function updateRing(el) {
     if (!el) { focusRing.classList.remove("visible"); return; }
-    const rect = el.getBoundingClientRect();
-    const cs   = getComputedStyle(el);
+    const rect  = el.getBoundingClientRect();
+    const cs    = getComputedStyle(el);
     const radii = [
       cs.borderTopLeftRadius,     cs.borderTopRightRadius,
       cs.borderBottomRightRadius, cs.borderBottomLeftRadius
@@ -181,75 +195,36 @@
     focusRing.classList.add("visible");
   }
 
+  // ── Shared navigation state ───────────────────────────────────────────────
   const STATE = { current: null };
 
   function isVisible(el) {
     if (!el || el.nodeType !== 1 || !el.isConnected) return false;
     const s = getComputedStyle(el);
     if (s.display === "none" || s.visibility === "hidden" || s.opacity === "0") return false;
+    // Note: we intentionally do NOT filter on pointerEvents so YouTube overlays
+    // (which may have pointer-events adjustments) still appear in the nav list.
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
-  }
-
-  function scrollToElement(el) {
-    const rect   = el.getBoundingClientRect();
-    const vw     = window.innerWidth;
-    const vh     = window.innerHeight;
-    const margin = 100;
-
-    let scrollY = 0;
-    let scrollX = 0;
-
-    if (rect.top < margin) {
-      scrollY = rect.top - margin;
-    } else if (rect.bottom > vh - margin) {
-      scrollY = rect.bottom - vh + margin;
-    }
-
-    if (rect.left < margin) {
-      scrollX = rect.left - margin;
-    } else if (rect.right > vw - margin) {
-      scrollX = rect.right - vw + margin;
-    }
-
-    if (scrollY !== 0 || scrollX !== 0) {
-      window.scrollBy({ top: scrollY, left: scrollX, behavior: "instant" });
-    }
   }
 
   function focusElement(el) {
     if (!el) return;
     if (STATE.current && STATE.current !== el) {
       STATE.current.classList.remove("tv-focus");
+      // Remove focused class from YouTube overlays too
       STATE.current.classList.remove("focused");
     }
     el.classList.add("tv-focus");
+    // Add focused class so YouTube enter-hint appears
     if (el._ytController) el.classList.add("focused");
     el.focus?.({ preventScroll: true });
+    el.scrollIntoView({ block: "center", inline: "center" });
     STATE.current = el;
-
-    // Scroll first (instant = synchronous), then read rect and draw ring
-    scrollToElement(el);
-    // Two rAFs: first lets scroll apply to layout, second reads final positions
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => updateRing(STATE.current));
-    });
+    requestAnimationFrame(() => updateRing(el));
   }
 
-  // Keep ring in sync during any scroll (e.g. user-initiated or programmatic)
-  let ringRafPending = false;
-  window.addEventListener('scroll', () => {
-    if (!ringRafPending) {
-      ringRafPending = true;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          updateRing(STATE.current);
-          ringRafPending = false;
-        });
-      });
-    }
-  }, { passive: true, capture: true });
-
+  // ── YouTube TV Controller ─────────────────────────────────────────────────
   let activeYTCtrl = null;
   const allYTControllers = [];
 
@@ -274,19 +249,18 @@
       this.volume      = 100;
       this._flashTimer = null;
       this._msgHandler = null;
-      this._wrapper    = null;
 
-      this._wrapIframe();
-      this._buildOverlay();
+      this._upgradeIframe();
+      this._buildOverlay();      // overlay on body — iframe DOM is UNTOUCHED
       this._listenMessages();
+      this._syncPosition();
 
       allYTControllers.push(this);
     }
 
-    // ── Wrap the iframe in a relative-position container ──────────────────
-    // The overlay is position:absolute inside the wrapper, so it scrolls
-    // WITH the iframe — no sync needed, no getBoundingClientRect drift.
-    _wrapIframe() {
+    // Add enablejsapi=1 so postMessage commands work.
+    // The iframe stays exactly where it is in the DOM — we never move or wrap it.
+    _upgradeIframe() {
       try {
         const src = new URL(this.iframe.src, location.href);
         if (!src.searchParams.has('enablejsapi')) {
@@ -295,35 +269,24 @@
           this.iframe.src = src.toString();
         }
       } catch(e) {}
-
-      // Create wrapper that takes the iframe's place
-      this._wrapper = document.createElement('div');
-      this._wrapper.style.cssText = `
-        position: relative;
-        display: inline-block;
-        width: ${this.iframe.offsetWidth  || this.iframe.width  || '100%'};
-        height: ${this.iframe.offsetHeight || this.iframe.height || '100%'};
-      `;
-      this.iframe.parentNode.insertBefore(this._wrapper, this.iframe);
-      this._wrapper.appendChild(this.iframe);
-
-      // Make iframe fill the wrapper
-      this.iframe.style.cssText += '; display:block; width:100%; height:100%;';
+      // Exclude the raw iframe from TV nav — the overlay handles navigation
       this.iframe.setAttribute('tabindex', '-1');
     }
 
+    // Build the overlay as a fixed-position div on <body>.
+    // It floats above the iframe, sized and positioned via getBoundingClientRect.
     _buildOverlay() {
       this.overlay = document.createElement('div');
       this.overlay.className = 'yt-tv-overlay';
       this.overlay.setAttribute('tabindex', '0');
       this.overlay._ytController = this;
-      // position:absolute inside wrapper — moves with iframe automatically
-      this.overlay.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; z-index:9999;';
 
+      // "Press ENTER" hint
       const hint = document.createElement('div');
       hint.className   = 'yt-tv-enter-hint';
       hint.textContent = '▶  Press ENTER to control';
 
+      // HUD bar
       this.hud = document.createElement('div');
       this.hud.className = 'yt-tv-hud';
       this.hud.innerHTML = `
@@ -346,6 +309,7 @@
         </div>
       `;
 
+      // Flash feedback
       this.flash = document.createElement('div');
       this.flash.className = 'yt-tv-flash';
 
@@ -353,11 +317,20 @@
       this.overlay.appendChild(this.hud);
       this.overlay.appendChild(this.flash);
 
-      // Append to wrapper, NOT to body
-      this._wrapper.appendChild(this.overlay);
+      // Appended to body — completely outside the iframe's DOM tree
+      document.body.appendChild(this.overlay);
     }
 
-    // No _syncPosition needed — overlay is inside the wrapper now
+    // Keep the fixed overlay positioned directly over the iframe.
+    _syncPosition() {
+      const rect = this.iframe.getBoundingClientRect();
+      // If iframe isn't rendered yet, skip
+      if (rect.width === 0 || rect.height === 0) return;
+      this.overlay.style.left   = `${rect.left}px`;
+      this.overlay.style.top    = `${rect.top}px`;
+      this.overlay.style.width  = `${rect.width}px`;
+      this.overlay.style.height = `${rect.height}px`;
+    }
 
     _send(func, args = []) {
       try {
@@ -397,11 +370,11 @@
       const pp    = this.hud.querySelector('.yt-tv-playpause');
       const vol   = this.hud.querySelector('.yt-tv-vol');
       const pct   = this.duration > 0 ? (this.currentTime / this.duration * 100) : 0;
-      fill.style.width  = `${pct}%`;
-      thumb.style.left  = `${pct}%`;
-      time.textContent  = `${fmtTime(this.currentTime)} / ${fmtTime(this.duration)}`;
-      pp.textContent    = this.paused ? '▶' : '⏸';
-      vol.textContent   = `🔊 ${Math.round(this.volume)}%`;
+      fill.style.width   = `${pct}%`;
+      thumb.style.left   = `${pct}%`;
+      time.textContent   = `${fmtTime(this.currentTime)} / ${fmtTime(this.duration)}`;
+      pp.textContent     = this.paused ? '▶' : '⏸';
+      vol.textContent    = `🔊 ${Math.round(this.volume)}%`;
     }
 
     _showFlash(text) {
@@ -422,6 +395,7 @@
       this.isActive = false;
       this.overlay.classList.remove('player-active');
       if (activeYTCtrl === this) activeYTCtrl = null;
+      // Return focus to the overlay so the user can navigate away normally
       focusElement(this.overlay);
     }
 
@@ -459,6 +433,15 @@
     }
   }
 
+  // Re-sync all overlays on scroll or resize (overlays are fixed, iframes scroll)
+  function syncAllOverlays() {
+    for (const ctrl of allYTControllers) ctrl._syncPosition();
+    // Also keep focus ring in sync if current element is a YouTube overlay
+    if (STATE.current?._ytController) updateRing(STATE.current);
+  }
+  window.addEventListener('scroll', syncAllOverlays, { passive: true, capture: true });
+  window.addEventListener('resize', syncAllOverlays, { passive: true });
+
   function setupYouTubeIframes() {
     document.querySelectorAll(
       'iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"]'
@@ -470,9 +453,11 @@
   }
 
   setupYouTubeIframes();
+  // Pick up iframes added later by the page
   const ytObserver = new MutationObserver(setupYouTubeIframes);
   ytObserver.observe(document.body, { childList: true, subtree: true });
 
+  // ── TV Navigation ─────────────────────────────────────────────────────────
   (() => {
     const SELECTOR = `
       a[href],
@@ -506,46 +491,55 @@
       return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
     }
 
+    function centerDistance(a, b) {
+      return Math.hypot(b.cx - a.cx, b.cy - a.cy);
+    }
+
     function bestInDirection(active, nodes, dir) {
       let best = null, bestScore = Infinity;
 
       for (const cand of nodes) {
         if (cand.el === active.el) continue;
 
-        let primary = 0, secondary = 0, valid = false;
+        let primary = 0, secondary = 0, align = 0, valid = false;
 
         if (dir === "right") {
-          if (cand.cx <= active.cx) continue;
-          valid     = true;
+          if (cand.left < active.right) continue;
+          valid = true;
           primary   = cand.left - active.right;
           secondary = Math.abs(cand.cy - active.cy);
+          align     = overlap1D(active.top, active.bottom, cand.top, cand.bottom);
         } else if (dir === "left") {
-          if (cand.cx >= active.cx) continue;
-          valid     = true;
+          if (cand.right > active.left) continue;
+          valid = true;
           primary   = active.left - cand.right;
           secondary = Math.abs(cand.cy - active.cy);
+          align     = overlap1D(active.top, active.bottom, cand.top, cand.bottom);
         } else if (dir === "down") {
-          if (cand.cy <= active.cy) continue;
-          valid     = true;
+          if (cand.top < active.bottom) continue;
+          valid = true;
           primary   = cand.top - active.bottom;
           secondary = Math.abs(cand.cx - active.cx);
+          align     = overlap1D(active.left, active.right, cand.left, cand.right);
         } else if (dir === "up") {
-          if (cand.cy >= active.cy) continue;
-          valid     = true;
+          if (cand.bottom > active.top) continue;
+          valid = true;
           primary   = active.top - cand.bottom;
           secondary = Math.abs(cand.cx - active.cx);
+          align     = overlap1D(active.left, active.right, cand.left, cand.right);
         }
 
         if (!valid) continue;
 
-        // Perpendicular overlap bonus — reward elements in the same row/column
-        const overlap = (dir === "left" || dir === "right")
-          ? overlap1D(active.top, active.bottom, cand.top, cand.bottom)
-          : overlap1D(active.left, active.right, cand.left, cand.right);
+        const alignRatio = (dir === "left" || dir === "right")
+          ? align / Math.max(1, active.height)
+          : align / Math.max(1, active.width);
 
-        const overlapBonus = overlap > 0 ? -500 : 0;
-
-        const score = overlapBonus + primary * 4 + secondary * 2;
+        const score =
+          (alignRatio > 0 ? 0 : 100000) +
+          primary * 10 +
+          secondary * 2 +
+          centerDistance(active, cand) * 0.05;
 
         if (score < bestScore) { bestScore = score; best = cand; }
       }
@@ -582,44 +576,39 @@
       let next = bestInDirection(currentNode, nodes, dir);
 
       if (!next) {
-        // No element found — scroll the page to reveal more, then retry
-        const scrollAmount = 400;
-        if (dir === "down")  window.scrollBy({ top:  scrollAmount, behavior: "instant" });
-        if (dir === "up")    window.scrollBy({ top: -scrollAmount, behavior: "instant" });
-        if (dir === "right") window.scrollBy({ left:  scrollAmount, behavior: "instant" });
-        if (dir === "left")  window.scrollBy({ left: -scrollAmount, behavior: "instant" });
+        const scrollAmount = 500;
+        if (dir === "down")  window.scrollBy({ top:  scrollAmount, behavior: "smooth" });
+        if (dir === "up")    window.scrollBy({ top: -scrollAmount, behavior: "smooth" });
+        if (dir === "right") window.scrollBy({ left:  scrollAmount, behavior: "smooth" });
+        if (dir === "left")  window.scrollBy({ left: -scrollAmount, behavior: "smooth" });
 
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const nodes2    = getFocusables();
-            const curNode2  = nodes2.find(n => n.el === STATE.current)
-                           || nodes2.find(n => n.el === document.activeElement)
-                           || null;
-            if (curNode2) {
-              const next2 = bestInDirection(curNode2, nodes2, dir);
-              if (next2) focusElement(next2);
-            }
-          });
-        });
-        return;
+        const nodes2  = getFocusables();
+        currentNode   = nodes2.find(n => n.el === STATE.current)
+                     || nodes2.find(n => n.el === document.activeElement)
+                     || null;
+        if (currentNode) next = bestInDirection(currentNode, nodes2, dir);
       }
 
-      focusElement(next);
+      if (next) focusElement(next);
     }
 
+    // ── Keyboard handler ───────────────────────────────────────────────────
     document.addEventListener("keydown", (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
 
+      // YouTube player mode: all keys go to the active controller
       if (activeYTCtrl) {
         if (e.key === 'Escape') activeYTCtrl.deactivate();
         else                    activeYTCtrl.handleKey(e.key);
         return;
       }
 
+      // Enter key
       if (e.key === 'Enter') {
         const cur = STATE.current;
         if (cur?._ytController) {
+          // Focused element is a YouTube overlay → enter player mode
           cur._ytController.activate();
         } else {
           cur?.click();
@@ -627,6 +616,7 @@
         return;
       }
 
+      // Arrow keys: navigate
       const map = {
         ArrowRight: "right", ArrowLeft: "left",
         ArrowUp: "up",       ArrowDown: "down"
@@ -648,10 +638,5 @@
 
     window.tvNav = { getFocusables, move, syncCurrent, state: STATE };
   })();
-
-  setTimeout(() => {
-    const dark = document.querySelector("#dark_theme");
-    if (!dark.checked) { dark.click(); }
-  }, 8000);
 
 })();
