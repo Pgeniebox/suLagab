@@ -212,7 +212,7 @@ function focusElement(el) {
     STATE.current = el;
 
     // Scroll element into view
-    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
+    el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
 
     // Wait for scroll to finish before positioning the ring
     clearTimeout(scrollEndTimer);
@@ -603,7 +603,9 @@ function focusElement(el) {
 
     }, true);
    
-window.addEventListener('scroll', () => {
+window.addEventListener('scroll', (e) => {
+   e.preventDefault();
+      e.stopImmediatePropagation();
     clearTimeout(scrollEndTimer);
     // Hide ring while scrolling to avoid ugly jumping
     focusRing.classList.remove("visible");
