@@ -206,8 +206,8 @@
     }
     el.classList.add("tv-focus");
     if (el._ytController) el.classList.add("focused");
-    el.focus?.({ preventScroll: true });
-   el.preventDefault();
+    el.focus?.({ preventScroll: false });
+   //el.preventDefault();
     el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
       STATE.current = el;
     requestAnimationFrame(() => updateRing(el));
