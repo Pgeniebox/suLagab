@@ -1,5 +1,4 @@
-
-function () {
+(function () {
 
   document.querySelector("header")?.remove();
   document.querySelector(".download-app-section")?.remove();
