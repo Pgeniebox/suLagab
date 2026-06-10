@@ -198,7 +198,25 @@
     return r.width > 0 && r.height > 0;
   }
 
- let scrollEndTimer = null;
+function scrollToElement(el) {
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 80; // px from edge before scrolling
+
+    // Only scroll if element is actually outside viewport
+    if (rect.top < margin) {
+        window.scrollBy({ top: rect.top - margin, behavior: "instant" });
+    } else if (rect.bottom > vh - margin) {
+        window.scrollBy({ top: rect.bottom - vh + margin, behavior: "instant" });
+    }
+
+    if (rect.left < margin) {
+        window.scrollBy({ left: rect.left - margin, behavior: "instant" });
+    } else if (rect.right > vw - margin) {
+        window.scrollBy({ left: rect.right - vw + margin, behavior: "instant" });
+    }
+}
 
 function focusElement(el) {
     if (!el) return;
@@ -211,14 +229,11 @@ function focusElement(el) {
     el.focus?.({ preventScroll: true });
     STATE.current = el;
 
-    // Scroll element into view
-    el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+    // Scroll manually only if needed, instantly
+    scrollToElement(el);
 
-    // Wait for scroll to finish before positioning the ring
-    clearTimeout(scrollEndTimer);
-    scrollEndTimer = setTimeout(() => {
-        requestAnimationFrame(() => updateRing(STATE.current));
-    }, 120); // 120ms = enough time for scroll to settle
+    // Read rect AFTER scroll since behavior is instant
+    requestAnimationFrame(() => updateRing(STATE.current));
 }
 
   let activeYTCtrl = null;
@@ -603,7 +618,7 @@ function focusElement(el) {
 
     }, true);
    
-window.addEventListener('scroll', (e) => {
+/*window.addEventListener('scroll', (e) => {
    e.preventDefault();
       e.stopImmediatePropagation();
     clearTimeout(scrollEndTimer);
@@ -613,7 +628,7 @@ window.addEventListener('scroll', (e) => {
     scrollEndTimer = setTimeout(() => {
         requestAnimationFrame(() => updateRing(STATE.current));
     }, 120);
-}, { passive: true, capture: true });
+}, { passive: true, capture: true });*/
    
     document.addEventListener("focusin", (e) => {
       if (e.target?.nodeType === 1 && isVisible(e.target)) {
