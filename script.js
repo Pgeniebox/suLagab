@@ -1,8 +1,5 @@
-// ==UserScript==
-// @name tv-nav-worker-optimized
-// @match https://www.ysscores.com/*
-// ==/UserScript==
-(function () {
+
+function () {
 
   document.querySelector("header")?.remove();
   document.querySelector(".download-app-section")?.remove();
