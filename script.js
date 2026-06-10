@@ -201,6 +201,32 @@
     return r.width > 0 && r.height > 0;
   }
 
+    function scrollToElement(el) {
+    const rect   = el.getBoundingClientRect();
+    const vw     = window.innerWidth;
+    const vh     = window.innerHeight;
+    const margin = 100;
+
+    let scrollY = 0;
+    let scrollX = 0;
+
+    if (rect.top < margin) {
+      scrollY = rect.top - margin;
+    } else if (rect.bottom > vh - margin) {
+      scrollY = rect.bottom - vh + margin;
+    }
+
+    if (rect.left < margin) {
+      scrollX = rect.left - margin;
+    } else if (rect.right > vw - margin) {
+      scrollX = rect.right - vw + margin;
+    }
+
+    if (scrollY !== 0 || scrollX !== 0) {
+      window.scrollBy({ top: scrollY, left: scrollX, behavior: "instant" });
+    }
+  }
+
   function focusElement(el) {
     if (!el) return;
     if (STATE.current && STATE.current !== el) {
@@ -210,10 +236,29 @@
     el.classList.add("tv-focus");
     if (el._ytController) el.classList.add("focused");
     el.focus?.({ preventScroll: true });
-    el.scrollIntoView({ block: "center", inline: "center" });
     STATE.current = el;
-    requestAnimationFrame(() => updateRing(el));
+
+    // Scroll first (instant = synchronous), then read rect and draw ring
+    scrollToElement(el);
+    // Two rAFs: first lets scroll apply to layout, second reads final positions
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => updateRing(STATE.current));
+    });
   }
+
+  // Keep ring in sync during any scroll (e.g. user-initiated or programmatic)
+  let ringRafPending = false;
+  window.addEventListener('scroll', () => {
+    if (!ringRafPending) {
+      ringRafPending = true;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          updateRing(STATE.current);
+          ringRafPending = false;
+        });
+      });
+    }
+  }, { passive: true, capture: true });
 
   let activeYTCtrl = null;
   const allYTControllers = [];
