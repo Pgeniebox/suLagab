@@ -1,3 +1,7 @@
+// ==UserScript==
+// @name tv-nav-worker-optimized
+// @match https://www.ysscores.com/*
+// ==/UserScript==
 (function () {
 
   document.querySelector("header")?.remove();
@@ -30,8 +34,56 @@
     *::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
     *:focus { outline: none; }
     .tv-focus { position: relative; z-index: 20; }
+.overlay-blur {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s;
+
+  box-sizing: border-box;
+}
+
+.overlay-blur.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.spotText {
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 40px;
+  color: white;
+  font-size: 2rem;
+}
   `;
   document.head.appendChild(style);
+function showBlurOverlay(Text) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay-blur active';
+
+  overlay.innerHTML = `
+    <div class="spotText">
+      ${Text}
+         </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  focusElement(overlay.querySelector('.spotText'));
+  overlay.querySelector('.spotText').focus();
+}
 
 
   const rendererCode = `
@@ -80,6 +132,7 @@
         ctx.save();
         ctx.globalAlpha = current.opacity;
 
+        // Beautiful tight neon glow profile
         const layers = [
           { width: 4,  alpha: lerp(0.5, 0.6, pulse) },
           { width: 10, alpha: lerp(0.3, 0.5, pulse) },
@@ -93,6 +146,7 @@
           ctx.stroke();
         }
 
+        // High contrast white core line
         drawRoundRect(ctx, current.x, current.y, current.w, current.h, current.radii);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
         ctx.lineWidth = 2;
@@ -313,7 +367,7 @@
   }
 
   function bestVisibleFocusables() {
-    const SELECTOR = `a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"], [tabindex]:not([tabindex="-1"]), [contenteditable="true"], summary, video`;
+    const SELECTOR = `.news-content, a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"], [tabindex]:not([tabindex="-1"]), [contenteditable="true"], summary, video`;
     return [...document.querySelectorAll(SELECTOR)].filter(isVisible).map(el => {
         const r = el.getBoundingClientRect();
         return {
@@ -390,18 +444,35 @@
     if (next) focusElement(next);
   }
 
+  // --- Listeners & Init ---
   setupYouTubeIframes();
   new MutationObserver(setupYouTubeIframes).observe(document.body, { childList: true, subtree: true });
-
+  let stop = false;
   document.addEventListener("keydown", (e) => {
-    e.preventDefault();
+
+        if(e.key === "Escape"){
+            if(undefined!==document.querySelector('.overlay-blur')){
+                   e.preventDefault();
+    e.stopImmediatePropagation();
+   document.querySelector('.overlay-blur').classList.remove('active');
+                stop=false;
+    setTimeout(() => document.querySelector('.overlay-blur').remove(), 300);
+            }
+    }
+      if(stop)return
+   e.preventDefault();
     e.stopImmediatePropagation();
     if (e.key === "Enter") {
       const cur = STATE.current || document.activeElement;
       if (cur && cur._ytVideoId) { sendYouTubeToJava(cur._ytVideoId); return; }
       cur?.click?.();
+      if(cur.classList?.contains("news-content")){
+          showBlurOverlay(cur.innerText);
+          stop=true;
+      }
       return;
     }
+
     const map = { ArrowRight: "right", ArrowLeft: "left", ArrowUp: "up", ArrowDown: "down" };
     const dir = map[e.key];
     if (dir) move(dir);
