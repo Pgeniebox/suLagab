@@ -98,7 +98,7 @@ function checkPass(e, direction) {
 function keyF(e) {
   if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
   e.preventDefault();
-
+  e.stopImmediatePropagation();
   activeDetail.cs = activeDetail.e.getBoundingClientRect();
   dbox = [];
 
