@@ -18,10 +18,55 @@
  const style = document.createElement("style");
   style.textContent = `
     *::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
+.overlay-blur {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s;
+
+  box-sizing: border-box;
+}
+
+.overlay-blur.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.spotText {
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 40px;
+  color: white;
+  font-size: 2rem;
+}
 
     `;
   document.head.appendChild(style);
+function showBlurOverlay(Text) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay-blur active';
 
+  overlay.innerHTML = `
+    <div class="spotText">
+      ${Text}
+         </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('.spotText').focus();
+}
 
 const focusRing = document.createElement('div');
 Object.assign(focusRing.style, {
@@ -30,13 +75,7 @@ Object.assign(focusRing.style, {
   zIndex:        '99999',
   boxSizing:     'border-box',
   opacity:       '0',
-  transition:    [
-    'top    0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-    'left   0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-    'width  0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-    'height 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-    'opacity 0.15s ease',
-  ].join(','),
+
 });
 document.body.appendChild(focusRing);
 
@@ -50,7 +89,6 @@ function moveFocusRing(cs, el) {
     borderRadius: getComputedStyle(el).borderRadius,
     boxShadow:    '0 0 0 2px rgba(255,255,255,0.9), 0 0 0 6px rgba(255,255,255,0.15), 0 0 20px 6px rgba(255,255,255,0.25)',
     opacity:      '1',
-     // transition:'all 0s ease',
   });
 }
 
@@ -62,9 +100,7 @@ let activeDetail = {
 
 focusRing.style.transition = 'none';
 moveFocusRing(activeDetail.cs, activeDetail.e);
-requestAnimationFrame(() => {
-  focusRing.style.transition = '';
-});
+
 
 function checkPass(e, direction) {
   const cs = e.getBoundingClientRect();
@@ -94,10 +130,35 @@ function checkPass(e, direction) {
 
   dbox.push({ e, cs, score: axialDist + perpDist * 2, overlap, axialDist });
 }
-
+let stop = false;
 function keyF(e) {
-  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight','Enter','Escape'].includes(e.key)) return;
+
+  if(e.key==='Escape'){
+      if(undefined!==document.querySelector('.overlay-blur')){
+    e.preventDefault();
+    e.stopImmediatePropagation();
+   document.querySelector('.overlay-blur').classList.remove('active');
+                stop=false;
+    setTimeout(() => document.querySelector('.overlay-blur').remove(), 300);
+            }
+}
+       if(stop)return;
   e.preventDefault();
+  e.stopImmediatePropagation();
+   if(e.key==='Enter'){
+
+       if(activeDetail.e._ytVideoId){sendYouTubeToJava(activeDetail.e._ytVideoId);return}
+        if(activeDetail.e.classList?.contains("news-content")){
+          showBlurOverlay(activeDetail.e.innerText);
+          stop=true;
+            return;
+      }
+       activeDetail.e.click();
+
+       return;
+   }
+
 
   activeDetail.cs = activeDetail.e.getBoundingClientRect();
   dbox = [];
@@ -118,7 +179,7 @@ function keyF(e) {
 
   activeDetail = pool[0];
 
-  activeDetail.e.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  activeDetail.e.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
 
   setTimeout(() => {
     activeDetail.cs = activeDetail.e.getBoundingClientRect();
