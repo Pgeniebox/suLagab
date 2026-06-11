@@ -83,6 +83,9 @@ function showBlurOverlay(Text) {
 
 
   const rendererCode = `
+   const raf = typeof requestAnimationFrame !== 'undefined'
+    ? cb => requestAnimationFrame(cb)
+    : cb => setTimeout(cb, 16);
     let canvas, ctx;
     let target = { x: 0, y: 0, w: 0, h: 0, radii: [0,0,0,0], visible: false };
     let current = { x: 0, y: 0, w: 0, h: 0, radii: [0,0,0,0], opacity: 0 };
@@ -106,10 +109,13 @@ function showBlurOverlay(Text) {
       ctx.closePath();
     }
 
-    function loop(time) {
-      if (!ctx) return requestAnimationFrame(loop);
+   let lastTime = 0;
 
-      const speed = 0.28;
+    function loop(time) {
+      if (!ctx) return raf(loop);
+ const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+     const speed = 1 - Math.pow(0.01, dt * 6);
       current.x = lerp(current.x, target.x, speed);
       current.y = lerp(current.y, target.y, speed);
       current.w = lerp(current.w, target.w, speed);
@@ -151,7 +157,7 @@ function showBlurOverlay(Text) {
         ctx.restore();
       }
 
-      requestAnimationFrame(loop);
+      raf(loop);
     }
 
     function handleMessage(data) {
@@ -160,9 +166,10 @@ function showBlurOverlay(Text) {
         canvas.width = data.width;
         canvas.height = data.height;
         ctx = canvas.getContext('2d');
+        ctx.scale(data.dpr, data.dpr);
         width = data.width;
         height = data.height;
-        requestAnimationFrame(loop);
+        raf(loop);
       } else if (data.type === 'UPDATE') {
         if (!target.visible && data.visible) {
            current.x = data.x;
@@ -201,7 +208,8 @@ function showBlurOverlay(Text) {
     const offscreen = canvasEl.transferControlToOffscreen();
     const blob = new Blob([rendererCode + `\n self.onmessage = e => handleMessage(e.data);`], { type: 'application/javascript' });
     workerSystem = new Worker(URL.createObjectURL(blob));
-    workerSystem.postMessage({ type: 'INIT', canvas: offscreen, width: w, height: h }, [offscreen]);
+      const dpr = window.devicePixelRatio || 1;
+    workerSystem.postMessage({ type: 'INIT', canvas: offscreen, width: w, height: h ,dpr}, [offscreen]);
   } else {
     canvasEl.width = w;
     canvasEl.height = h;
@@ -361,39 +369,61 @@ function showBlurOverlay(Text) {
       }, true);
     });
   }
+let _nodeCache = null;
+
+const _cacheInvalidator = new MutationObserver(() => { _nodeCache = null; });
+_cacheInvalidator.observe(document.body, { childList: true, subtree: true });
+window.addEventListener('scroll', () => { _nodeCache = null; }, { passive: true, capture: true });
 
   function bestVisibleFocusables() {
     const SELECTOR = `.news-content, a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"], [tabindex]:not([tabindex="-1"]), [contenteditable="true"], summary, video`;
-    return [...document.querySelectorAll(SELECTOR)].filter(isVisible).map(el => {
-        const r = el.getBoundingClientRect();
-        return {
-          el, left: r.left, right: r.right, top: r.top, bottom: r.bottom, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2, width: r.width, height: r.height
-        };
-      });
+
+      if (_nodeCache) return _nodeCache;
+  _nodeCache = [...document.querySelectorAll(SELECTOR)]
+    .filter(isVisible)
+    .map(el => {
+      const r = el.getBoundingClientRect();
+      return { el, left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+               cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2,
+               width: r.width, height: r.height };
+    });
+  return _nodeCache;
   }
 
   function overlap1D(a1, a2, b1, b2) { return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1)); }
   function centerDistance(a, b) { return Math.hypot(b.cx - a.cx, b.cy - a.cy); }
-
+const SNAP = 6;
   function bestInDirection(active, nodes, dir) {
     let best = null, bestScore = Infinity;
-    for (const cand of nodes) {
-      if (cand.el === active.el) continue;
-      let primary = 0, secondary = 0, align = 0, valid = false;
+   for (const cand of nodes) {
+    if (cand.el === active.el) continue;
+    let primary = 0, secondary = 0, align = 0, valid = false;
 
-      if (dir === "right") {
-        if (cand.left < active.right) continue;
-        valid = true; primary = cand.left - active.right; secondary = Math.abs(cand.cy - active.cy); align = overlap1D(active.top, active.bottom, cand.top, cand.bottom);
-      } else if (dir === "left") {
-        if (cand.right > active.left) continue;
-        valid = true; primary = active.left - cand.right; secondary = Math.abs(cand.cy - active.cy); align = overlap1D(active.top, active.bottom, cand.top, cand.bottom);
-      } else if (dir === "down") {
-        if (cand.top < active.bottom) continue;
-        valid = true; primary = cand.top - active.bottom; secondary = Math.abs(cand.cx - active.cx); align = overlap1D(active.left, active.right, cand.left, cand.right);
-      } else if (dir === "up") {
-        if (cand.bottom > active.top) continue;
-        valid = true; primary = active.top - cand.bottom; secondary = Math.abs(cand.cx - active.cx); align = overlap1D(active.left, active.right, cand.left, cand.right);
-      }
+    if (dir === "right") {
+      if (cand.left < active.right - SNAP) continue;
+      valid = true;
+      primary = Math.max(0, cand.left - active.right);
+      secondary = Math.abs(cand.cy - active.cy);
+      align = overlap1D(active.top, active.bottom, cand.top, cand.bottom);
+    } else if (dir === "left") {
+      if (cand.right > active.left + SNAP) continue;
+      valid = true;
+      primary = Math.max(0, active.left - cand.right);
+      secondary = Math.abs(cand.cy - active.cy);
+      align = overlap1D(active.top, active.bottom, cand.top, cand.bottom);
+    } else if (dir === "down") {
+      if (cand.top < active.bottom - SNAP) continue;
+      valid = true;
+      primary = Math.max(0, cand.top - active.bottom);
+      secondary = Math.abs(cand.cx - active.cx);
+      align = overlap1D(active.left, active.right, cand.left, cand.right);
+    } else if (dir === "up") {
+      if (cand.bottom > active.top + SNAP) continue;
+      valid = true;
+      primary = Math.max(0, active.top - cand.bottom);
+      secondary = Math.abs(cand.cx - active.cx);
+      align = overlap1D(active.left, active.right, cand.left, cand.right);
+    }
 
       if (!valid) continue;
 
