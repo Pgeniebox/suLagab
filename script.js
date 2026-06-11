@@ -14,15 +14,14 @@
 
   document.body.style.setProperty('padding-top', '50px', 'important');
   document.body.style.setProperty('padding-bottom', '50px', 'important');
- document.body.style.setProperty('overflow', 'visible', 'important');
-  const adObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      for (const node of m.addedNodes) {
-        if (node.classList?.contains("google-auto-placed")) node.remove();
-      }
-    }
-  });
-  adObserver.observe(document.body, { childList: true, subtree: true });
+
+ const style = document.createElement("style");
+  style.textContent = `
+    *::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
+
+    `;
+  document.head.appendChild(style);
+
 
 const focusRing = document.createElement('div');
 Object.assign(focusRing.style, {
@@ -51,6 +50,7 @@ function moveFocusRing(cs, el) {
     borderRadius: getComputedStyle(el).borderRadius,
     boxShadow:    '0 0 0 2px rgba(255,255,255,0.9), 0 0 0 6px rgba(255,255,255,0.15), 0 0 20px 6px rgba(255,255,255,0.25)',
     opacity:      '1',
+     // transition:'all 0s ease',
   });
 }
 
@@ -63,7 +63,7 @@ let activeDetail = {
 focusRing.style.transition = 'none';
 moveFocusRing(activeDetail.cs, activeDetail.e);
 requestAnimationFrame(() => {
-  focusRing.style.transition = ''; 
+  focusRing.style.transition = '';
 });
 
 function checkPass(e, direction) {
@@ -98,11 +98,11 @@ function checkPass(e, direction) {
 function keyF(e) {
   if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
   e.preventDefault();
-  e.stopImmediatePropagation();
+
   activeDetail.cs = activeDetail.e.getBoundingClientRect();
   dbox = [];
 
-  Array.from(document.querySelectorAll('a[href], button')).forEach(x => {
+  Array.from(document.querySelectorAll('.news-content, a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"], [contenteditable="true"], summary, video')).forEach(x => {
     if (x === activeDetail.e) return;
     const visible = x.checkVisibility
       ? x.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
@@ -127,6 +127,39 @@ function keyF(e) {
 }
 
 document.addEventListener('keydown', keyF);
+    function getYouTubeVideoId(src) {
+    try {
+      const u = new URL(src, location.href);
+      const m = u.pathname.match(/\/embed\/([^/?]+)/);
+      return m ? m[1] : null;
+    } catch (e) { return null; }
+  }
+
+  function sendYouTubeToJava(videoId) {
+    try {
+      if (window.Android && typeof Android.openYouTubeTv === "function") Android.openYouTubeTv(String(videoId));
+    } catch (e) {}
+  }
+
+  function setupYouTubeIframes() {
+    document.querySelectorAll(".google-auto-placed").forEach((e)=>{if(undefined!==e){e.remove()}});
+    document.querySelectorAll('iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"]').forEach(iframe => {
+      if (iframe._ytTVReady) return;
+      iframe._ytTVReady = true;
+      const videoId = getYouTubeVideoId(iframe.src);
+      iframe._ytVideoId = videoId;
+      iframe.setAttribute("tabindex", "0");
+      iframe.addEventListener("click", (e) => {
+        if (!iframe._ytVideoId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        sendYouTubeToJava(iframe._ytVideoId);
+      }, true);
+    });
+  }
+  setupYouTubeIframes();
+  new MutationObserver(setupYouTubeIframes).observe(document.body, { childList: true, subtree: true });
+
   setTimeout(() => {
     let dark = document.querySelector("#dark_theme");
     if (dark && !dark.checked) dark.click();
