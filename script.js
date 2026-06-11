@@ -189,7 +189,7 @@ function keyF(e) {
   Im= setInterval(() => {
     activeDetail.cs = activeDetail.e.getBoundingClientRect();
     moveFocusRing(activeDetail.cs, activeDetail.e);
-  }, 500);
+  }, 33);
 }
 
 document.addEventListener('keydown', keyF);
