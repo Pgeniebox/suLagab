@@ -54,6 +54,7 @@
   padding: 40px;
   color: white;
   font-size: 2rem;
+  border: none;
 }
 
     `;
@@ -140,11 +141,12 @@ function keyF(e) {
   if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight','Enter','Escape'].includes(e.key)) return;
 
   if(e.key==='Escape'){
-      if(undefined!==document.querySelector('.overlay-blur')){
+    if(undefined!==document.querySelector('.overlay-blur')){
     e.preventDefault();
     e.stopImmediatePropagation();
    document.querySelector('.overlay-blur').classList.remove('active');
-                stop=false;
+    stop=false;
+    focusRing.style.setProperty('opacity', '1', 'important');
     setTimeout(() => document.querySelector('.overlay-blur').remove(), 300);
             }
 }
@@ -155,6 +157,8 @@ function keyF(e) {
        clearInterval(Im);
        if(activeDetail.e._ytVideoId){sendYouTubeToJava(activeDetail.e._ytVideoId);return}
         if(activeDetail.e.classList?.contains("news-content")){
+          focusRing.style.setProperty('opacity', '0', 'important');
+
           showBlurOverlay(activeDetail.e.innerText);
           stop=true;
             return;
