@@ -1,3 +1,7 @@
+// ==UserScript==
+// @name tv-nav-worker-optimized
+// @match https://www.ysscores.com/*
+// ==/UserScript==
 (function () {
 
   document.querySelector("header")?.remove();
@@ -131,6 +135,7 @@ function checkPass(e, direction) {
   dbox.push({ e, cs, score: axialDist + perpDist * 2, overlap, axialDist });
 }
 let stop = false;
+let Im=null;    
 function keyF(e) {
   if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight','Enter','Escape'].includes(e.key)) return;
 
@@ -172,19 +177,19 @@ function keyF(e) {
   });
 
   if (!dbox.length) return;
-
+  clearInterval(Im);
   const aligned = dbox.filter(x => x.overlap > 0);
   const pool    = aligned.length ? aligned : dbox;
   pool.sort((a, b) => aligned.length ? a.axialDist - b.axialDist : a.score - b.score);
 
   activeDetail = pool[0];
 
-  activeDetail.e.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
+  activeDetail.e.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
 
-  setTimeout(() => {
+  Im= setInterval(() => {
     activeDetail.cs = activeDetail.e.getBoundingClientRect();
     moveFocusRing(activeDetail.cs, activeDetail.e);
-  }, 80);
+  }, 500);
 }
 
 document.addEventListener('keydown', keyF);
