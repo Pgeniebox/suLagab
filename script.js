@@ -1,7 +1,4 @@
-// ==UserScript==
-// @name tv-nav-worker-optimized
-// @match https://www.ysscores.com/*
-// ==/UserScript==
+
 (function () {
 
   document.querySelector("header")?.remove();
@@ -18,6 +15,9 @@
 
   document.body.style.setProperty('padding-top', '50px', 'important');
   document.body.style.setProperty('padding-bottom', '50px', 'important');
+  document.body.style.setProperty('overflow-x', 'hidden', 'important');
+  document.body.style.setProperty('overflow-y', 'hidden', 'important');
+
 
  const style = document.createElement("style");
   style.textContent = `
@@ -135,7 +135,7 @@ function checkPass(e, direction) {
   dbox.push({ e, cs, score: axialDist + perpDist * 2, overlap, axialDist });
 }
 let stop = false;
-let Im=null;    
+let Im=null;
 function keyF(e) {
   if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight','Enter','Escape'].includes(e.key)) return;
 
@@ -152,7 +152,7 @@ function keyF(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
    if(e.key==='Enter'){
-
+       clearInterval(Im);
        if(activeDetail.e._ytVideoId){sendYouTubeToJava(activeDetail.e._ytVideoId);return}
         if(activeDetail.e.classList?.contains("news-content")){
           showBlurOverlay(activeDetail.e.innerText);
@@ -193,13 +193,33 @@ function keyF(e) {
 }
 
 document.addEventListener('keydown', keyF);
-    function getYouTubeVideoId(src) {
-    try {
-      const u = new URL(src, location.href);
-      const m = u.pathname.match(/\/embed\/([^/?]+)/);
-      return m ? m[1] : null;
-    } catch (e) { return null; }
+  function getYouTubeVideoId(src) {
+  try {
+    const u = new URL(src, location.href);
+
+    // 1. watch?v=
+    if (u.searchParams.has("v")) {
+      return u.searchParams.get("v");
+    }
+
+    // 2. youtu.be/ID
+    if (u.hostname.includes("youtu.be")) {
+      return u.pathname.slice(1);
+    }
+
+    // 3. /embed/ID
+    let m = u.pathname.match(/\/embed\/([^/?]+)/);
+    if (m) return m[1];
+
+    // 4. /shorts/ID
+    m = u.pathname.match(/\/shorts\/([^/?]+)/);
+    if (m) return m[1];
+
+    return null;
+  } catch {
+    return null;
   }
+}
 
   function sendYouTubeToJava(videoId) {
     try {
@@ -209,10 +229,16 @@ document.addEventListener('keydown', keyF);
 
   function setupYouTubeIframes() {
     document.querySelectorAll(".google-auto-placed").forEach((e)=>{if(undefined!==e){e.remove()}});
-    document.querySelectorAll('iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"]').forEach(iframe => {
+    document.querySelectorAll('iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"],a[href*="youtube.com"]').forEach(iframe => {
       if (iframe._ytTVReady) return;
       iframe._ytTVReady = true;
-      const videoId = getYouTubeVideoId(iframe.src);
+        let videoId=null;
+      if(iframe.tagName === 'A'){
+        videoId = getYouTubeVideoId(iframe.href);
+
+      }else{
+       videoId = getYouTubeVideoId(iframe.src);
+      }
       iframe._ytVideoId = videoId;
       iframe.setAttribute("tabindex", "0");
       iframe.addEventListener("click", (e) => {
