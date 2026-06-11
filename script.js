@@ -166,7 +166,7 @@ function showBlurOverlay(Text) {
         canvas.width = data.width;
         canvas.height = data.height;
         ctx = canvas.getContext('2d');
-        ctx.scale(data.dpr, data.dpr);
+        //ctx.scale(data.dpr, data.dpr);
         width = data.width;
         height = data.height;
         raf(loop);
