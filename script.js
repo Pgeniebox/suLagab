@@ -14,7 +14,7 @@
 
   document.body.style.setProperty('padding-top', '50px', 'important');
   document.body.style.setProperty('padding-bottom', '50px', 'important');
-
+ document.body.style.setProperty('overflow', 'visible', 'important');
   const adObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
