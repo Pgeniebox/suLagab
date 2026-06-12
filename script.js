@@ -49,140 +49,284 @@
     overlay.querySelector('.spotText').focus();
   }
 
-  const WORKER_SRC = `
-    let canvas = null, ctx = null, dpr = 1;
-    let curRect = null, curBR = 0;
-    let ticker  = null;
+ const WORKER_SRC = `
+  let canvas = null, ctx = null, dpr = 1;
+  let ticker = null;
 
-    self.onmessage = ({ data: m }) => {
-      switch (m.type) {
+  const state = {
+    rect: null,      // cible actuelle
+    from: null,      // ancienne position pour animer le déplacement
+    br: 0,
+    t: 0,
+    navPulse: 0,     // pulse après navigation
+    moveStart: 0,
+    moveDur: 180
+  };
 
-        case 'init':
-          canvas = m.canvas;
-          ctx    = canvas.getContext('2d');
-          dpr    = m.dpr || 1;
-          break;
+  self.onmessage = ({ data: m }) => {
+    switch (m.type) {
+      case 'init':
+        canvas = m.canvas;
+        ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+        dpr = m.dpr || 1;
+        break;
 
-        case 'resize':
-          if (canvas) { canvas.width = m.w; canvas.height = m.h; repaint(); }
-          break;
-
-       
-        case 'start':
-          curRect = m.rect;
-          curBR   = m.br || 0;
+      case 'resize':
+        if (canvas) {
+          canvas.width = m.w;
+          canvas.height = m.h;
           repaint();
-          if (!ticker) ticker = setInterval(() => self.postMessage({ type: 'tick' }), 33);
-          break;
-
-        case 'update':
-          curRect = m.rect;
-          curBR   = m.br || 0;
-          repaint();
-          break;
-
-        case 'stop':
-          clearInterval(ticker); ticker = null;
-          curRect = null;
-          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-          break;
-
-        case 'nav': {
-          const idx = scoreNav(m.rects, m.active, m.dir);
-          self.postMessage({ type: 'nav-result', idx });
-          break;
         }
+        break;
+
+      case 'start':
+        state.rect = cloneRect(m.rect);
+        state.from = cloneRect(m.rect);
+        state.br = m.br || 0;
+        state.moveStart = performance.now();
+        state.navPulse = 1;
+        repaint();
+        if (!ticker) ticker = setInterval(() => {
+          state.t += 1 / 30;
+          if (state.navPulse > 0) state.navPulse = Math.max(0, state.navPulse - 0.05);
+          repaint();
+          self.postMessage({ type: 'tick' });
+        }, 33);
+        break;
+
+      case 'update':
+        if (state.rect) state.from = cloneRect(state.rect);
+        state.rect = cloneRect(m.rect);
+        state.br = m.br || 0;
+        state.moveStart = performance.now();
+        state.navPulse = 1;
+        repaint();
+        break;
+
+      case 'stop':
+        clearInterval(ticker);
+        ticker = null;
+        state.rect = null;
+        state.from = null;
+        state.navPulse = 0;
+        if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        break;
+
+      case 'nav': {
+        const idx = scoreNav(m.rects, m.active, m.dir);
+        self.postMessage({ type: 'nav-result', idx });
+        break;
       }
+    }
+  };
+
+  function repaint() {
+    if (!ctx || !canvas || !state.rect) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const now = performance.now();
+    const k = Math.min(1, (now - state.moveStart) / state.moveDur);
+    const ease = easeOutCubic(k);
+
+    const cur = state.from ? lerpRect(state.from, state.rect, ease) : state.rect;
+
+    const pulse = 0.5 + 0.5 * Math.sin(state.t * 4.2);
+    const navBoost = 1 + state.navPulse * 0.18;
+    const pad = (6 + 4 * pulse) * dpr * navBoost;
+
+    const x = cur.left * dpr - pad;
+    const y = cur.top * dpr - pad;
+    const w = cur.width * dpr + pad * 2;
+    const h = cur.height * dpr + pad * 2;
+    const r = Math.max(0, Math.min((state.br || 0) * dpr, w / 2, h / 2));
+
+    ctx.save();
+
+    // outer glow
+    drawRoundedRect(
+      x - 7 * dpr, y - 7 * dpr, w + 14 * dpr, h + 14 * dpr, r + 7 * dpr,
+      'rgba(120,220,255,0.18)',
+      (9 + pulse * 4) * dpr,
+      'rgba(120,220,255,0.48)',
+      (24 + pulse * 10) * dpr
+    );
+
+    // soft aura
+    ctx.save();
+    ctx.globalAlpha = 0.20 + pulse * 0.10;
+    const aura = ctx.createRadialGradient(
+      x + w / 2, y + h / 2, 0,
+      x + w / 2, y + h / 2, Math.max(w, h) * 0.8
+    );
+    aura.addColorStop(0, 'rgba(255,255,255,0.12)');
+    aura.addColorStop(0.45, 'rgba(90,220,255,0.10)');
+    aura.addColorStop(1, 'rgba(90,220,255,0.00)');
+    ctx.fillStyle = aura;
+    fillRoundedRect(x, y, w, h, r);
+    ctx.restore();
+
+    // dashed pulse ring
+    ctx.save();
+    ctx.setLineDash([10 * dpr, 8 * dpr]);
+    ctx.lineDashOffset = -state.t * 50 * dpr;
+    drawRoundedRect(
+      x - 2 * dpr, y - 2 * dpr, w + 4 * dpr, h + 4 * dpr, r + 2 * dpr,
+      'rgba(255,255,255,0.34)',
+      (2.2 + pulse * 1.2) * dpr,
+      'rgba(255,255,255,0.22)',
+      10 * dpr
+    );
+    ctx.restore();
+
+    // main border
+    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+    grad.addColorStop(0.00, 'rgba(90,220,255,0.95)');
+    grad.addColorStop(0.25, 'rgba(255,255,255,1.00)');
+    grad.addColorStop(0.50, 'rgba(120,240,180,0.95)');
+    grad.addColorStop(0.75, 'rgba(255,255,255,1.00)');
+    grad.addColorStop(1.00, 'rgba(90,220,255,0.95)');
+
+    drawRoundedRect(
+      x, y, w, h, r,
+      grad,
+      (2.0 + pulse * 0.9) * dpr,
+      'rgba(90,220,255,0.55)',
+      (10 + pulse * 6) * dpr
+    );
+
+    // moving highlight sweep
+    ctx.save();
+    ctx.beginPath();
+    clipRoundedRect(x, y, w, h, r);
+    ctx.clip();
+
+    const sx = x - w * 0.45 + (w * 1.9) * ((Math.sin(state.t * 0.9) + 1) / 2);
+    const sweep = ctx.createLinearGradient(sx - 70 * dpr, y, sx + 70 * dpr, y + h);
+    sweep.addColorStop(0, 'rgba(255,255,255,0.00)');
+    sweep.addColorStop(0.5, 'rgba(255,255,255,0.40)');
+    sweep.addColorStop(1, 'rgba(255,255,255,0.00)');
+    ctx.globalAlpha = 0.18 + pulse * 0.10;
+    ctx.fillStyle = sweep;
+    ctx.fillRect(x - 70 * dpr, y, w + 140 * dpr, h);
+    ctx.restore();
+
+    // corner sparks
+    drawSpark(x, y, tSpark(state.t, 0), dpr);
+    drawSpark(x + w, y, tSpark(state.t, 1), dpr);
+    drawSpark(x + w, y + h, tSpark(state.t, 2), dpr);
+    drawSpark(x, y + h, tSpark(state.t, 3), dpr);
+
+    ctx.restore();
+  }
+
+  function drawRoundedRect(x, y, w, h, r, strokeStyle, lineWidth, shadowColor, shadowBlur) {
+    ctx.beginPath();
+    clipRoundedRect(x, y, w, h, r);
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.shadowColor = shadowColor;
+    ctx.shadowBlur = shadowBlur;
+    ctx.stroke();
+  }
+
+  function fillRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    clipRoundedRect(x, y, w, h, r);
+    ctx.fill();
+  }
+
+  function clipRoundedRect(x, y, w, h, r) {
+    if (r <= 0) {
+      ctx.rect(x, y, w, h);
+      return;
+    }
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function drawSpark(x, y, amp, dpr) {
+    const size = (2 + amp * 2.8) * dpr;
+    ctx.save();
+    ctx.globalAlpha = 0.16 + amp * 0.24;
+    ctx.fillStyle = 'rgba(255,255,255,1)';
+    ctx.shadowColor = 'rgba(120,220,255,0.9)';
+    ctx.shadowBlur = 14 * dpr;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function tSpark(t, index) {
+    return 0.5 + 0.5 * Math.sin(t * 2.2 + index * 1.6);
+  }
+
+  function cloneRect(r) {
+    if (!r) return null;
+    return {
+      left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+      width: r.width, height: r.height
     };
+  }
 
+  function lerpRect(a, b, k) {
+    return {
+      left: a.left + (b.left - a.left) * k,
+      top: a.top + (b.top - a.top) * k,
+      right: a.right + (b.right - a.right) * k,
+      bottom: a.bottom + (b.bottom - a.bottom) * k,
+      width: a.width + (b.width - a.width) * k,
+      height: a.height + (b.height - a.height) * k
+    };
+  }
 
-    function repaint() {
-      if (!ctx || !curRect) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
 
-      const pad = 5 * dpr;
-      const x = curRect.left   * dpr - pad;
-      const y = curRect.top    * dpr - pad;
-      const w = curRect.width  * dpr + pad * 2;
-      const h = curRect.height * dpr + pad * 2;
-      const r = Math.max(0, Math.min(curBR * dpr, w / 2, h / 2));
+  function scoreNav(rects, active, dir) {
+    const aCX = active.left + active.width  / 2;
+    const aCY = active.top  + active.height / 2;
+    const isH = dir === 'ArrowLeft' || dir === 'ArrowRight';
+    const hits = [];
 
-      ctx.save();
+    for (let i = 0; i < rects.length; i++) {
+      const cs = rects[i];
+      const dx = (cs.left + cs.width  / 2) - aCX;
+      const dy = (cs.top  + cs.height / 2) - aCY;
 
-      strokeRing(
-        x - 2*dpr, y - 2*dpr, w + 4*dpr, h + 4*dpr, r + 2*dpr,
-        'rgba(255,255,255,0.15)', 6 * dpr,
-        'rgba(255,255,255,0.25)', 20 * dpr
-      );
+      const ok = dir === 'ArrowLeft'  ? dx < 0
+               : dir === 'ArrowRight' ? dx > 0
+               : dir === 'ArrowUp'    ? dy < 0
+               : dir === 'ArrowDown'  ? dy > 0
+               : false;
+      if (!ok) continue;
 
-      strokeRing(
-        x, y, w, h, r,
-        'rgba(255,255,255,0.9)', 2 * dpr,
-        'transparent', 0
-      );
+      const axial = isH ? Math.abs(dx) : Math.abs(dy);
+      const perp = isH ? Math.abs(dy) : Math.abs(dx);
+      const overlap = isH
+        ? Math.max(0, Math.min(active.bottom, cs.bottom) - Math.max(active.top, cs.top))
+        : Math.max(0, Math.min(active.right, cs.right) - Math.max(active.left, cs.left));
 
-      ctx.restore();
+      hits.push({ i, axial, score: axial + perp * 2, overlap });
     }
 
-    function strokeRing(x, y, w, h, r, color, lw, shadowColor, shadowBlur) {
-      ctx.beginPath();
-      if (r <= 0) {
-        ctx.rect(x, y, w, h);
-      } else {
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y,     x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x,     y + h, x,     y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x,     y,     x + r, y);
-        ctx.closePath();
-      }
-      ctx.strokeStyle = color;
-      ctx.lineWidth   = lw;
-      ctx.shadowColor = shadowColor;
-      ctx.shadowBlur  = shadowBlur;
-      ctx.stroke();
-    }
-
-
-    function scoreNav(rects, active, dir) {
-      const aCX = active.left + active.width  / 2;
-      const aCY = active.top  + active.height / 2;
-      const isH = dir === 'ArrowLeft' || dir === 'ArrowRight';
-      const hits = [];
-
-      for (let i = 0; i < rects.length; i++) {
-        const cs = rects[i];
-        const dx = (cs.left + cs.width  / 2) - aCX;
-        const dy = (cs.top  + cs.height / 2) - aCY;
-
-        const ok = dir === 'ArrowLeft'  ? dx < 0
-                 : dir === 'ArrowRight' ? dx > 0
-                 : dir === 'ArrowUp'    ? dy < 0
-                 : dir === 'ArrowDown'  ? dy > 0
-                 : false;
-        if (!ok) continue;
-
-        const axial   = isH ? Math.abs(dx) : Math.abs(dy);
-        const perp    = isH ? Math.abs(dy) : Math.abs(dx);
-        const overlap = isH
-          ? Math.max(0, Math.min(active.bottom, cs.bottom) - Math.max(active.top,  cs.top))
-          : Math.max(0, Math.min(active.right,  cs.right)  - Math.max(active.left, cs.left));
-
-        hits.push({ i, axial, score: axial + perp * 2, overlap });
-      }
-
-      if (!hits.length) return -1;
-      const aligned = hits.filter(x => x.overlap > 0);
-      const pool    = aligned.length ? aligned : hits;
-      pool.sort((a, b) => aligned.length ? a.axial - b.axial : a.score - b.score);
-      return pool[0].i;
-    }
-  `;
-
+    if (!hits.length) return -1;
+    const aligned = hits.filter(x => x.overlap > 0);
+    const pool = aligned.length ? aligned : hits;
+    pool.sort((a, b) => aligned.length ? a.axial - b.axial : a.score - b.score);
+    return pool[0].i;
+  }
+`;
   const worker = new Worker(
     URL.createObjectURL(new Blob([WORKER_SRC], { type: 'application/javascript' }))
   );
@@ -225,7 +369,7 @@
   };
   ringStart(activeDetail.e);
   let stop       = false;
-  let navPending = false;  
+  let navPending = false;
   let _navResolve = null;
 
   worker.onmessage = ({ data: m }) => {
@@ -289,8 +433,16 @@
 
     try {
       const activeRect = activeDetail.e.getBoundingClientRect();
-
-      const elements = Array.from(document.querySelectorAll(
+        let selector = document;
+    let checkSel = Array.from(document.querySelectorAll('.popup-item')).filter((x)=>{
+   return x.checkVisibility
+          ? x.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+          : x.offsetWidth > 0 && x.offsetHeight > 0;
+})[0];
+      if(checkSel!==undefined){
+       selector = checkSel;
+}
+      const elements = Array.from(selector.querySelectorAll(
         '.video-seo-panel,.prediction-result-wrap,.mobile-single-title, .match-teams-rank, .news-content, a[href], button:not([disabled]), input:not([disabled]),' +
         ' select:not([disabled]), textarea:not([disabled]),' +
         ' iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"],' +
@@ -304,15 +456,14 @@
 
       if (!elements.length) return;
 
-    
+
       const rects = elements.map(x => plainRect(x.getBoundingClientRect()));
 
       const idx = await askNav(rects, plainRect(activeRect), e.key);
       if (idx === -1) return;
 
       activeDetail = { e: elements[idx], cs: rects[idx] };
-      activeDetail.e.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-
+activeDetail.e.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
 
 
     } finally {
