@@ -1,7 +1,4 @@
-// ==UserScript==
-// @name tv-nav-worker-optimized
-// @match https://www.ysscores.com/*
-// ==/UserScript==
+
 (function () {
 
   document.querySelector("header")?.remove();
@@ -91,7 +88,7 @@
           if (state.navPulse > 0) state.navPulse = Math.max(0, state.navPulse - 0.05);
           repaint();
           self.postMessage({ type: 'tick' });
-        }, 33);
+        }, 99);
         break;
 
       case 'update':
